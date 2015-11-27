@@ -1,3 +1,5 @@
+var _ = lodash;
+
 if(!Meteor.permissions) {
   Meteor.permissions = new Mongo.Collection("permissions");
 }
@@ -5,54 +7,81 @@ if(!Meteor.permissions) {
 if('undefined' === typeof Permissions) {
   Permissions = {};
 }
+var PUBLIC = "public";
+var LOGIN = "login";
+var ANONYMOUS = "anonymous";
+var permissionModes = [PUBLIC, LOGIN, ANONYMOUS];
 
 _.extend(Permissions, {
-  userHasPermissionByState: userHasPermissionByState
+  LOGIN: LOGIN,
+  PUBLIC: PUBLIC,
+  ANONYMOUS: ANONYMOUS,
+  permissionModes: permissionModes,
+  stateHasPermissionByUser: stateHasPermissionByUser,
+  getPermission: getPermission,
+  getReplaceStateName: getReplaceStateName
 });
 
-Meteor.permissions.findByQuery = findByQuery;
-
 /**
  *
- * @param user
- * @param stateName
+ * @param stateName {String}
+ * @param user {[String|Object]}
  * @returns {boolean|*}
  */
-function userHasPermissionByState(user, stateName) {
-  check(user, Match.OneOf(Object, String));
+function stateHasPermissionByUser(stateName, user) {
   check(stateName, String);
+  check(user, Match.OneOf(Object, String, null, undefined));
 
-  var permission = Meteor.permissions.findOne({state: stateName});
-  return !permission || permission.roles.length === 0 || Roles.userIsInRole(user, permission.roles);
+  var permission = getPermission(stateName);
+
+  // deny
+  if(!permission) {
+    return false;
+  }
+
+  if(permission.mode === Permissions.PUBLIC) {
+    return true;
+  }
+
+  // login
+  if(user) {
+    if(permission.mode === Permissions.ANONYMOUS) {
+      return false;
+    }
+  } else {
+    return permission.mode === Permissions.ANONYMOUS;
+  }
+
+  if(_.isArray(permission.roles)) {
+    return Roles.userIsInRole(user, permission.roles);
+  } else {
+    return true;
+  }
 }
+
 /**
  *
- * @param {Object} query
- * @param {Number} limit
- * @returns {*}
+ * @param stateName
+ * @returns {Object}
  */
-function findByQuery(query, limit) {
-  check(query, Object);
-  check(limit, Match.Optional(Number));
-  var searchQuery = {};
-  var searchSort = [["state", "asc"]];
-  var options = {limit: limit || 0};
-
-  query = _.pick(query, 'score', 'category');
-
-  if(query.score && query.score != "-1") {
-    searchQuery["score"] = query.score;
+function getPermission(stateName) {
+  check(stateName, String);
+  var exactMatchPermission = Meteor.permissions.findOne({name: stateName});
+  if(exactMatchPermission) {
+    return exactMatchPermission;
+  } else {
+    var parentStateName = stateName.split(".")[0];
+    return Meteor.permissions.findOne({name: parentStateName});
   }
 
-  if(query.category && query.category != "-1") {
-    searchQuery["category"] = query.category;
-  }
+}
 
-  if(query.order && query.order !== "createdAt") {
-    searchSort.unshift([query.order, "desc"]);
-  }
-  options.sort = searchSort;
-
-  $log.debug("query : ", searchQuery, "options : ", options);
-  return Meteor.permissions.find(searchQuery, options);
+/**
+ *
+ * @param {String} stateName
+ * @returns {String}
+ */
+function getReplaceStateName(stateName) {
+  var permission = getPermission(stateName);
+  return permission ? permission.replaceStateName : null;
 }

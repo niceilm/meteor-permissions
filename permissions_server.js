@@ -1,105 +1,78 @@
-if(!Meteor.permissions) {
-  Meteor.permissions = new Mongo.Collection("permissions");
-}
-
-Meteor.permissions.attachSchema(new SimpleSchema({
-  state: {type: String, label: "상태", index: 1, unique: true},
-  roles: {type: [String], label: "롤"}
-}));
-
-if('undefined' === typeof Permissions) {
-  Permissions = {};
-}
+var _ = lodash;
+var StateMatcher = {
+  name: String,
+  mode: Match.OneOf(null, undefined, Match.Where(_.partial(_.includes, Permissions.permissionModes, _))),
+  roles: Match.OneOf(null, undefined, [String]),
+  replaceStateName: Match.OneOf(null, undefined, String)
+};
+var _collectionPermissions = Meteor.permissions;
+_collectionPermissions._ensureIndex("name", 1);
+_collectionPermissions._ensureIndex("mode", 1);
+_collectionPermissions._ensureIndex("roles", 1);
 
 /**
  * Publish logged-in user's roles so client-side checks can work.
  *
  * Use a named publish function so clients can check `ready()` state.
  */
-Meteor.publish('_permissions', permissions);
+Meteor.publish('_permissions', publishPermissions);
 
 _.extend(Permissions, {
-  addState: addState,
-  removeState: removeState,
-  addStatesToRoles: _.wrap(addStatesToRoles, _checkParameter),
-  removeStatesToRoles: _.wrap(removeStatesToRoles, _checkParameter),
-  setStateToRoles: _.wrap(setStateToRoles, _checkParameter)
+  createPermission: createPermission,
+  removePermission: removePermission,
+  setPermission: setPermission,
+  removePermissionAll: removePermissionAll
 });
 
-function permissions() {
-  return Meteor.permissions.find();
-}
-
-function addState(state) {
-  Permissions.addStatesToRoles(state, []);
+function removePermissionAll() {
+  _collectionPermissions.remove({});
 }
 /**
  *
  * @param state
  */
-function removeState(state) {
-  check(state, String);
-  Meteor.permissions.remove({state: state});
-}
+function createPermission(state) {
+  check(state, Match.OneOf(String, StateMatcher));
 
-/**
- *
- * @param {String|Array} states
- * @param {String|Array} roles
- */
-function addStatesToRoles(states, roles) {
-  _.each(states, function(state) {
-    var permission = Meteor.permissions.findOne({state: state});
-    if(permission) {
-      Meteor.permissions.update(permission._id, {$addToSet: {roles: {$each: roles}}});
-    } else {
-      Meteor.permissions.insert({state: state, roles: roles});
-    }
-  });
-}
-
-/**
- *
- * @param {String|Array} states
- * @param {String|Array} roles
- */
-function removeStatesToRoles(states, roles) {
-  _.each(states, function(state) {
-    var permission = Meteor.permissions.findOne({state: state});
-    if(permission) {
-      Meteor.permissions.update(permission._id, {$pullAll: {roles: roles}});
-    } else {
-      Meteor.permissions.insert({state: state, roles: []});
-    }
-  });
-}
-
-/**
- *
- * @param {String|Array} states
- * @param {String|Array} roles
- */
-function setStateToRoles(states, roles) {
-  _.each(states, function(state) {
-    var permission = Meteor.permissions.findOne({state: state});
-    if(permission) {
-      Meteor.permissions.update(permission._id, {$set: {roles: roles}});
-    } else {
-      Meteor.permissions.insert({state: state, roles: roles});
-    }
-  });
-}
-
-function _checkParameter(fnAfter, states, roles) {
-  check(fnAfter, Function);
-  check(states, Match.OneOf(String, [String]));
-  check(roles, Match.OneOf(String, [String]));
-
-  if(!_.isArray(states)) {
-    states = [states];
+  if(_.isString(state)) {
+    state = {name: state, roles: null, replaceStateName: null};
   }
-  if(!_.isArray(roles)) {
-    roles = [roles];
+
+  state.mode = state.roles ? Permissions.LOGIN : (state.mode || Permissions.PUBLIC);
+
+  _collectionPermissions.insert(state);
+}
+
+/**
+ *
+ * @param {String} stateName
+ */
+function removePermission(stateName) {
+  check(stateName, String);
+  _collectionPermissions.remove({name: stateName});
+}
+
+function setPermission(state) {
+  check(state, StateMatcher);
+  _collectionPermissions.upsert({name: state.name}, {$set: state});
+}
+
+/**
+ *
+ * @returns {Cursor}
+ */
+function publishPermissions() {
+  var query = {mode: {$in: [Permissions.PUBLIC, Permissions.ANONYMOUS]}};
+  var userId = this.userId;
+  if(userId) {
+    var roles = Roles.getRolesForUser(userId);
+    query = {
+      $or: [
+        {mode: {$in: [Permissions.PUBLIC, Permissions.ANONYMOUS]}},
+        {mode: Permissions.LOGIN, $or: [{roles: null}, {roles: []}, {roles: {$in: roles}}]}
+      ]
+    };
   }
-  fnAfter.apply(this, [states, roles]);
+
+  return _collectionPermissions.find(query);
 }
