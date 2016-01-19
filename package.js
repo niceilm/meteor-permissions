@@ -1,6 +1,6 @@
 Package.describe({
   name: 'flynn:permissions',
-  version: '0.0.5',
+  version: '0.0.6',
   // Brief, one-line summary of the package.
   summary: 'role based permission',
   // URL to the Git repository containing the source code for this package.
@@ -16,10 +16,9 @@ Package.onUse(function(api) {
   api.use('mongo');
   api.use('tracker');
   api.use('check');
-  api.use('ecmascript');
-  api.use('flynn:logger@0.0.3');
+  api.use('flynn:logger@0.0.4');
   api.use('alanning:roles@1.2.14');
-  api.use('stevezhu:lodash@3.10.1');
+  api.use('stevezhu:lodash@4.0.0');
 
   api.addFiles('permissions.js');
   api.addFiles('permissions_server.js', 'server');
@@ -27,7 +26,6 @@ Package.onUse(function(api) {
 });
 
 Package.onTest(function(api) {
-  api.use('ecmascript');
   api.use('accounts-password');
   api.use('sanjo:jasmine@0.20.2');
   api.use('velocity:helpers@0.5.0');
