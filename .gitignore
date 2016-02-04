@@ -6,3 +6,6 @@
 
 ## Directory-based project format:
 .idea/
+
+## generate
+.versions
