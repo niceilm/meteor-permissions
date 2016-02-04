@@ -1,3 +1,3 @@
 Tracker.autorun(function() {
-  Permissions.subscription = Meteor.subscribe("_permissions");
+  Permissions.subscription = Meteor.subscribe("_permissions", Meteor.user());
 });

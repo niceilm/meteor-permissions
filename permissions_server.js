@@ -8,7 +8,7 @@ var StateMatcher = {
 var _collectionPermissions = Meteor.permissions;
 _collectionPermissions._ensureIndex("name", 1);
 _collectionPermissions._ensureIndex("mode", 1);
-_collectionPermissions._ensureIndex("roles", 1);
+_collectionPermissions._ensureIndex({mode: 1, roles: 1});
 
 /**
  * Publish logged-in user's roles so client-side checks can work.
@@ -61,7 +61,8 @@ function setPermission(state) {
  *
  * @returns {Cursor}
  */
-function publishPermissions() {
+function publishPermissions(user) {
+  check(user, Match.OneOf(null, Object));
   var query = {mode: {$in: [Permissions.PUBLIC, Permissions.ANONYMOUS]}};
   var userId = this.userId;
   if(userId) {
